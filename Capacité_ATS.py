@@ -22,7 +22,7 @@
 #    • la courbe de charge radio (profil journalier moyen) ;
 #    • les droites Audio-DORATASK et l'estimation de capacité DORATASK ;
 #    • la courbe empirique Michaelis-Menten et la capacité empirique ;
-#    • les intersections (φc*, C*) calibrant simultanément la fraction
+#    • les intersections (φ_c*, C*) calibrant simultanément la fraction
 #      vocale et la capacité, comparées à la capacité déclarée.
 #
 #  Méthodologie : article SSRN « Méthode d'estimation de la capacité d'un
@@ -860,7 +860,7 @@ def run_app():
 
     # ── 5. Intersections ─────────────────────────────────────────────────
     st.header("5️⃣ Intersections Audio-DORATASK × courbe empirique "
-              "(φc*, C*)")
+              "(φ_c*, C*)")
 
     inter_rows = []
     fig3, axes3 = plt.subplots(1, len(alphas),
@@ -922,7 +922,7 @@ def run_app():
         ax.text(PHI_C_RANGE[1] * 0.99, capa_declaree + 0.6,
                 f"Déclarée {capa_declaree}/h", color=GRIS, fontsize=7.5,
                 ha="right")
-        ax.set_xlabel("φc — fraction vocale de la charge de travail")
+        ax.set_xlabel("φ_c — fraction vocale de la charge de travail")
         ax.set_title(f"α = {a} | W = {win_min} min")
         ax.grid(True, alpha=0.25)
         ax.legend(loc="upper left", fontsize=7)
@@ -940,7 +940,7 @@ def run_app():
             meilleur = p70.sort_values("α", ascending=False).iloc[0]
             st.success(
                 f"**Scénario nominal prudent (P70, α={meilleur['α']})** : "
-                f"φc* ≈ {meilleur['φ_c*']:.2f} → "
+                f"φ_c* ≈ {meilleur['φ_c*']:.2f} → "
                 f"**C* ≈ {meilleur['C* (vols/h)']:.1f} vols/h** "
                 f"(capacité déclarée : {capa_declaree} vols/h, écart "
                 f"{meilleur['Écart vs déclarée (%)']:+.1f} %). Les valeurs "
