@@ -61,7 +61,7 @@ VIOLET = "#6A1B9A"; GRIS = "#888888"
 
 LABELS_EST = {"mean": "Moyenne", "p50": "Médiane", "p70": "P70", "p85": "P85"}
 
-__VERSION__ = "1.2 — listes déroulantes Docs (GitHub)"
+__VERSION__ = "1.3 — dépôt ATS_CAPA câblé, listing Docs automatique"
 COULEURS_EST = {"mean": GRIS, "p50": BLEU, "p70": ORANGE, "p85": ROUGE}
 STYLES_EST = {"mean": ":", "p50": "-", "p70": "--", "p85": "-."}
 
@@ -72,7 +72,7 @@ PHI_C_VALUES = np.arange(PHI_C_RANGE[0], PHI_C_RANGE[1] + 0.0025, 0.005)
 #  ⚠️ À METTRE À JOUR une fois le dépôt créé : remplacer <utilisateur>/<depot>
 #  par les vôtres (ex. "roufai/capacite-ats"). Le contenu du dossier Docs est
 #  listé automatiquement via l'API GitHub et proposé en listes déroulantes.
-GITHUB_REPO = "<utilisateur>/<depot>"   # ex. "roufai/capacite-ats"
+GITHUB_REPO = "MoustaphaRouf/ATS_CAPA"
 GITHUB_BRANCHE = "main"
 GITHUB_DOSSIER = "Docs"
 
@@ -630,22 +630,18 @@ def run_app():
         nom_traf = f_traf.name
     else:
         st.markdown(
-            "Les fichiers d'exemple sont hébergés dans le dossier "
-            f"**{GITHUB_DOSSIER}** du dépôt GitHub du projet — choisissez-"
-            "les dans les listes déroulantes ci-dessous.")
-        cfg1, cfg2, cfg3 = st.columns([2, 1, 1])
-        depot = cfg1.text_input("Dépôt GitHub (utilisateur/depot)",
-                                GITHUB_REPO)
-        branche = cfg2.text_input("Branche", GITHUB_BRANCHE)
-        dossier = cfg3.text_input("Dossier", GITHUB_DOSSIER)
+            "Les fichiers d'exemple sont chargés automatiquement depuis le "
+            f"dossier **{GITHUB_DOSSIER}** du dépôt "
+            f"[{GITHUB_REPO}](https://github.com/{GITHUB_REPO}) — "
+            "choisissez simplement vos fichiers dans les listes "
+            "déroulantes.")
 
-        if "<utilisateur>" in depot:
-            st.error(
-                "Le dépôt GitHub des fichiers d'exemple n'est pas encore "
-                "configuré : renseignez-le ci-dessus au format "
-                "utilisateur/depot, ou éditez la constante GITHUB_REPO en "
-                "tête de Capacité_ATS.py.")
-            st.stop()
+        with st.expander("⚙️ Source avancée (autre dépôt / branche / "
+                         "dossier)", expanded=False):
+            depot = st.text_input("Dépôt GitHub (utilisateur/depot)",
+                                  GITHUB_REPO)
+            branche = st.text_input("Branche", GITHUB_BRANCHE)
+            dossier = st.text_input("Dossier", GITHUB_DOSSIER)
 
         @st.cache_data(ttl=600,
                        show_spinner="Lecture du dossier Docs sur GitHub…")
@@ -656,9 +652,13 @@ def run_app():
             fichiers = _lister(depot.strip(), dossier.strip(),
                                branche.strip())
         except Exception as e:
-            st.error(f"Impossible de lister le dossier {dossier} du dépôt "
-                     f"{depot} : {e}. Vérifier que le dépôt est public et "
-                     "que le dossier existe sur cette branche.")
+            st.error(
+                f"Impossible de lister le dossier {dossier} du dépôt "
+                f"{depot} : {e}. Causes possibles : pas de connexion "
+                "Internet, limite de débit de l'API GitHub atteinte "
+                "(réessayer dans quelques minutes), ou dossier absent de "
+                "cette branche. En attendant, la source « Téléverser mes "
+                "fichiers » reste disponible.")
             st.stop()
 
         def _ko(t):
