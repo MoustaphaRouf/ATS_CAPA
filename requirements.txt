@@ -1,0 +1,10 @@
+# Capacité ATS — Application Streamlit (étape 2 du pipeline Audio-DORATASK × Radio-Trafic)
+# Installation : pip install -r requirements.txt
+# Lancement    : streamlit run Capacité_ATS.py
+streamlit>=1.32
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+xlrd>=2.0.1        # lecture des fichiers trafic .xls
+openpyxl>=3.1      # lecture des fichiers trafic .xlsx
