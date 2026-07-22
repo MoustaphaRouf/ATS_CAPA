@@ -66,6 +66,16 @@ STYLES_EST = {"mean": ":", "p50": "-", "p70": "--", "p85": "-."}
 PHI_C_RANGE = (0.02, 0.70)
 PHI_C_VALUES = np.arange(PHI_C_RANGE[0], PHI_C_RANGE[1] + 0.0025, 0.005)
 
+# ── Fichiers d'exemple hébergés sur GitHub (dossier Docs du dépôt) ────────
+#  ⚠️ À METTRE À JOUR une fois le dépôt créé : remplacer <utilisateur> et
+#  <depot> par les vôtres, et ajuster les noms de fichiers si nécessaire.
+#  Format requis : URL "raw" GitHub → https://raw.githubusercontent.com/...
+GITHUB_DOCS_BASE = ("https://raw.githubusercontent.com/"
+                    "<utilisateur>/<depot>/main/Docs")
+URL_DEMO_CHARGE = f"{GITHUB_DOCS_BASE}/predictions_Fev.csv"
+URL_DEMO_TRAFIC = (f"{GITHUB_DOCS_BASE}/"
+                   "STATISTIQUE%20SURVOL%20AOUT%202023%20AU%20JUILLET%202024.XLS")
+
 
 # ══════════════════════════════════════════════════════════════════════════
 #  1. FONCTIONS UTILITAIRES (pures — adaptées du notebook V11.4/V11.5)
@@ -460,6 +470,17 @@ def superposition(ts_arr, n_total, win_min, alpha, step_min,
     return pd.DataFrame(recs)
 
 
+def telecharger_fichier(url, timeout=60):
+    """Télécharge un fichier (URL raw GitHub) → (octets, nom_de_fichier)."""
+    import urllib.request
+    import urllib.parse
+    req = urllib.request.Request(url, headers={"User-Agent": "CapaciteATS"})
+    with urllib.request.urlopen(req, timeout=timeout) as rep:
+        donnees = rep.read()
+    nom = urllib.parse.unquote(url.rsplit("/", 1)[-1]) or "fichier"
+    return donnees, nom
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  3. INTERFACE STREAMLIT
 # ══════════════════════════════════════════════════════════════════════════
@@ -549,25 +570,74 @@ def run_app():
                                     1, 120, 21)
 
     # ── Chargement des fichiers ──────────────────────────────────────────
-    st.header("1️⃣ Chargement des fichiers (issus de l'étape 1)")
-    c1, c2 = st.columns(2)
-    with c1:
-        f_pred = st.file_uploader(
-            "Charge audio — segments classés CTL / PILOTE (CSV)",
-            type=["csv"],
-            help="Colonnes attendues : fichier_source, debut_s, duree_s "
-                 "(ou fin_s), prediction, confiance. Produit à l'étape 1 — "
-                 "contacter moustapharouf@yahoo.fr.")
-    with c2:
-        f_traf = st.file_uploader(
-            "Statistiques de trafic (XLS / XLSX / CSV)",
-            type=["xls", "xlsx", "csv"],
-            help="Doit contenir la date du vol et les heures d'entrée / "
-                 "sortie de l'espace aérien étudié.")
+    st.header("1️⃣ Données d'entrée (issues de l'étape 1)")
 
-    if not (f_pred and f_traf):
-        st.warning("Chargez les deux fichiers pour lancer l'analyse.")
-        st.stop()
+    source = st.radio(
+        "Source des données",
+        ["📤 Téléverser mes fichiers",
+         "🧪 Tester avec les fichiers d'exemple (GitHub / Docs)"],
+        horizontal=True)
+
+    octets_pred = octets_traf = None
+    nom_traf = ""
+
+    if source.startswith("📤"):
+        c1, c2 = st.columns(2)
+        with c1:
+            f_pred = st.file_uploader(
+                "Charge audio — segments classés CTL / PILOTE (CSV)",
+                type=["csv"],
+                help="Colonnes attendues : fichier_source, debut_s, duree_s "
+                     "(ou fin_s), prediction, confiance. Produit à "
+                     "l'étape 1 — contacter moustapharouf@yahoo.fr.")
+        with c2:
+            f_traf = st.file_uploader(
+                "Statistiques de trafic (XLS / XLSX / CSV)",
+                type=["xls", "xlsx", "csv"],
+                help="Doit contenir la date du vol et les heures d'entrée / "
+                     "sortie de l'espace aérien étudié.")
+        if not (f_pred and f_traf):
+            st.warning("Chargez les deux fichiers pour lancer l'analyse — "
+                       "ou basculez sur les fichiers d'exemple pour tester "
+                       "l'application.")
+            st.stop()
+        octets_pred = f_pred.getvalue()
+        octets_traf = f_traf.getvalue()
+        nom_traf = f_traf.name
+    else:
+        st.markdown(
+            "Les fichiers d'exemple sont hébergés dans le dossier **Docs** "
+            "du dépôt GitHub du projet (URLs *raw* modifiables ci-dessous).")
+        url_charge = st.text_input("URL du fichier de charge (CSV)",
+                                   URL_DEMO_CHARGE)
+        url_trafic = st.text_input("URL du fichier trafic (XLS/XLSX/CSV)",
+                                   URL_DEMO_TRAFIC)
+
+        @st.cache_data(show_spinner="Téléchargement des fichiers "
+                                    "d'exemple depuis GitHub…")
+        def _demo(u1, u2):
+            p, _ = telecharger_fichier(u1)
+            t, n = telecharger_fichier(u2)
+            return p, t, n
+
+        if "<utilisateur>" in url_charge or "<utilisateur>" in url_trafic:
+            st.error(
+                "Les URLs des fichiers d'exemple ne sont pas encore "
+                "configurées : éditez les constantes GITHUB_DOCS_BASE / "
+                "URL_DEMO_CHARGE / URL_DEMO_TRAFIC en tête de "
+                "Capacité_ATS.py (ou collez les URLs raw ci-dessus).")
+            st.stop()
+        try:
+            octets_pred, octets_traf, nom_traf = _demo(url_charge,
+                                                       url_trafic)
+        except Exception as e:
+            st.error(f"Téléchargement impossible depuis GitHub : {e}. "
+                     "Vérifier que le dépôt est public et que les URLs "
+                     "sont bien au format raw.githubusercontent.com.")
+            st.stop()
+        st.success(f"Fichiers d'exemple chargés : charge audio "
+                   f"({len(octets_pred)/1e6:.1f} Mo) et trafic "
+                   f"« {nom_traf} » ({len(octets_traf)/1e3:.0f} ko).")
 
     # ── Pipeline (mis en cache sur le contenu des fichiers + paramètres) ─
     @st.cache_data(show_spinner="Lecture des prédictions acoustiques…")
@@ -586,10 +656,8 @@ def run_app():
         return rasteriser(dr, va)
 
     try:
-        octets_pred = f_pred.getvalue()
-        octets_traf = f_traf.getvalue()
         df_radio = _etape_pred(octets_pred, seuil_confiance)
-        valides = _etape_trafic(octets_traf, f_traf.name,
+        valides = _etape_trafic(octets_traf, nom_traf,
                                 str(date_debut), str(date_fin),
                                 col_date, col_entree, col_sortie,
                                 int(decalage_utc), int(transit_nominal))
@@ -727,7 +795,7 @@ def run_app():
         return df_r, synths
 
     df_reel, synths = _etape_empirique(
-        octets_pred, seuil_confiance, octets_traf, f_traf.name,
+        octets_pred, seuil_confiance, octets_traf, nom_traf,
         str(date_debut), str(date_fin), col_date, col_entree, col_sortie,
         int(decalage_utc), int(transit_nominal), int(win_min),
         tuple(alphas), int(step_min), int(t_avant), int(t_apres),
