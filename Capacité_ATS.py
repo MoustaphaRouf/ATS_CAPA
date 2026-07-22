@@ -60,6 +60,8 @@ BLEU = "#1565C0"; ORANGE = "#EF6C00"; VERT = "#2E7D32"; ROUGE = "#E53935"
 VIOLET = "#6A1B9A"; GRIS = "#888888"
 
 LABELS_EST = {"mean": "Moyenne", "p50": "Médiane", "p70": "P70", "p85": "P85"}
+
+__VERSION__ = "1.2 — listes déroulantes Docs (GitHub)"
 COULEURS_EST = {"mean": GRIS, "p50": BLEU, "p70": ORANGE, "p85": ROUGE}
 STYLES_EST = {"mean": ":", "p50": "-", "p70": "--", "p85": "-."}
 
@@ -67,14 +69,12 @@ PHI_C_RANGE = (0.02, 0.70)
 PHI_C_VALUES = np.arange(PHI_C_RANGE[0], PHI_C_RANGE[1] + 0.0025, 0.005)
 
 # ── Fichiers d'exemple hébergés sur GitHub (dossier Docs du dépôt) ────────
-#  ⚠️ À METTRE À JOUR une fois le dépôt créé : remplacer <utilisateur> et
-#  <depot> par les vôtres, et ajuster les noms de fichiers si nécessaire.
-#  Format requis : URL "raw" GitHub → https://raw.githubusercontent.com/...
-GITHUB_DOCS_BASE = ("https://raw.githubusercontent.com/"
-                    "<utilisateur>/<depot>/main/Docs")
-URL_DEMO_CHARGE = f"{GITHUB_DOCS_BASE}/predictions_Fev.csv"
-URL_DEMO_TRAFIC = (f"{GITHUB_DOCS_BASE}/"
-                   "STATISTIQUE%20SURVOL%20AOUT%202023%20AU%20JUILLET%202024.XLS")
+#  ⚠️ À METTRE À JOUR une fois le dépôt créé : remplacer <utilisateur>/<depot>
+#  par les vôtres (ex. "roufai/capacite-ats"). Le contenu du dossier Docs est
+#  listé automatiquement via l'API GitHub et proposé en listes déroulantes.
+GITHUB_REPO = "<utilisateur>/<depot>"   # ex. "roufai/capacite-ats"
+GITHUB_BRANCHE = "main"
+GITHUB_DOSSIER = "Docs"
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -481,6 +481,30 @@ def telecharger_fichier(url, timeout=60):
     return donnees, nom
 
 
+def lister_docs_github(depot, dossier=GITHUB_DOSSIER, branche=GITHUB_BRANCHE,
+                       base_api="https://api.github.com", timeout=30):
+    """Liste les fichiers du dossier `dossier` d'un dépôt GitHub public.
+
+    Retourne une liste de dicts {nom, url, taille}, triée par nom.
+    `depot` au format "utilisateur/depot".
+    """
+    import json
+    import urllib.request
+    url = (f"{base_api}/repos/{depot}/contents/{dossier}?ref={branche}")
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "CapaciteATS",
+                      "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=timeout) as rep:
+        contenu = json.loads(rep.read().decode("utf-8"))
+    if isinstance(contenu, dict):   # message d'erreur API
+        raise RuntimeError(contenu.get("message", "réponse API inattendue"))
+    fichiers = [{"nom": f["name"], "url": f["download_url"],
+                 "taille": f.get("size", 0)}
+                for f in contenu
+                if f.get("type") == "file" and f.get("download_url")]
+    return sorted(fichiers, key=lambda f: f["nom"].lower())
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  3. INTERFACE STREAMLIT
 # ══════════════════════════════════════════════════════════════════════════
@@ -495,7 +519,7 @@ def run_app():
     st.caption(
         "Estimation de la capacité d'un organe ATS par analyse des "
         "communications vocales — méthodologie de l'article SSRN "
-        "(M. A. Roufaï, ASECNA).")
+        f"(M. A. Roufaï, ASECNA). — **Version {__VERSION__}**")
 
     st.info(
         "**Étape 1 (préalable, hors application)** — L'isolation des prises "
@@ -606,12 +630,88 @@ def run_app():
         nom_traf = f_traf.name
     else:
         st.markdown(
-            "Les fichiers d'exemple sont hébergés dans le dossier **Docs** "
-            "du dépôt GitHub du projet (URLs *raw* modifiables ci-dessous).")
-        url_charge = st.text_input("URL du fichier de charge (CSV)",
-                                   URL_DEMO_CHARGE)
-        url_trafic = st.text_input("URL du fichier trafic (XLS/XLSX/CSV)",
-                                   URL_DEMO_TRAFIC)
+            "Les fichiers d'exemple sont hébergés dans le dossier "
+            f"**{GITHUB_DOSSIER}** du dépôt GitHub du projet — choisissez-"
+            "les dans les listes déroulantes ci-dessous.")
+        cfg1, cfg2, cfg3 = st.columns([2, 1, 1])
+        depot = cfg1.text_input("Dépôt GitHub (utilisateur/depot)",
+                                GITHUB_REPO)
+        branche = cfg2.text_input("Branche", GITHUB_BRANCHE)
+        dossier = cfg3.text_input("Dossier", GITHUB_DOSSIER)
+
+        if "<utilisateur>" in depot:
+            st.error(
+                "Le dépôt GitHub des fichiers d'exemple n'est pas encore "
+                "configuré : renseignez-le ci-dessus au format "
+                "utilisateur/depot, ou éditez la constante GITHUB_REPO en "
+                "tête de Capacité_ATS.py.")
+            st.stop()
+
+        @st.cache_data(ttl=600,
+                       show_spinner="Lecture du dossier Docs sur GitHub…")
+        def _lister(d, doss, br):
+            return lister_docs_github(d, doss, br)
+
+        try:
+            fichiers = _lister(depot.strip(), dossier.strip(),
+                               branche.strip())
+        except Exception as e:
+            st.error(f"Impossible de lister le dossier {dossier} du dépôt "
+                     f"{depot} : {e}. Vérifier que le dépôt est public et "
+                     "que le dossier existe sur cette branche.")
+            st.stop()
+
+        def _ko(t):
+            return f"{t/1e6:.1f} Mo" if t >= 1e6 else f"{t/1e3:.0f} ko"
+
+        # Les deux listes déroulantes montrent TOUT le contenu du dossier
+        # Docs ; l'utilisateur choisit lui-même le fichier de prédictions
+        # et le fichier de statistiques.
+        tous_noms = [f["nom"] for f in fichiers]
+        if not tous_noms:
+            st.error(f"Le dossier {dossier} du dépôt {depot} est vide.")
+            st.stop()
+
+        etiquettes = {f["nom"]: f"{f['nom']}  ({_ko(f['taille'])})"
+                      for f in fichiers}
+        urls = {f["nom"]: f["url"] for f in fichiers}
+
+        # Présélections raisonnables dans le contenu du dossier :
+        # "predi"/"charge" → prédictions ; "statistique"/"trafic"/"survol"
+        # → statistiques.
+        def _defaut(noms, mots):
+            for i, n in enumerate(noms):
+                if any(m in n.lower() for m in mots):
+                    return i
+            return 0
+
+        s1, s2 = st.columns(2)
+        nom_charge = s1.selectbox(
+            "📄 Prédictions — segments classés CTL/PILOTE",
+            tous_noms,
+            index=_defaut(tous_noms, ["predi", "charge"]),
+            format_func=lambda n: etiquettes[n],
+            help="Contenu du dossier Docs — choisir le CSV de prédictions "
+                 "acoustiques produit à l'étape 1.")
+        nom_traf_sel = s2.selectbox(
+            "📊 Statistiques de trafic",
+            tous_noms,
+            index=_defaut(tous_noms, ["statistique", "trafic", "survol"]),
+            format_func=lambda n: etiquettes[n],
+            help="Contenu du dossier Docs — choisir le fichier XLS/XLSX/CSV "
+                 "des statistiques de trafic (entrées/sorties).")
+
+        if not nom_charge.lower().endswith(".csv"):
+            st.error(f"« {nom_charge} » n'est pas un CSV : le fichier de "
+                     "prédictions doit être au format CSV.")
+            st.stop()
+        if not nom_traf_sel.lower().endswith((".xls", ".xlsx", ".csv")):
+            st.error(f"« {nom_traf_sel} » n'est pas un fichier de trafic "
+                     "exploitable (formats acceptés : XLS, XLSX, CSV).")
+            st.stop()
+        if nom_charge == nom_traf_sel:
+            st.warning("Le même fichier est sélectionné pour la charge et "
+                       "le trafic — vérifiez votre choix.")
 
         @st.cache_data(show_spinner="Téléchargement des fichiers "
                                     "d'exemple depuis GitHub…")
@@ -620,24 +720,15 @@ def run_app():
             t, n = telecharger_fichier(u2)
             return p, t, n
 
-        if "<utilisateur>" in url_charge or "<utilisateur>" in url_trafic:
-            st.error(
-                "Les URLs des fichiers d'exemple ne sont pas encore "
-                "configurées : éditez les constantes GITHUB_DOCS_BASE / "
-                "URL_DEMO_CHARGE / URL_DEMO_TRAFIC en tête de "
-                "Capacité_ATS.py (ou collez les URLs raw ci-dessus).")
-            st.stop()
         try:
-            octets_pred, octets_traf, nom_traf = _demo(url_charge,
-                                                       url_trafic)
+            octets_pred, octets_traf, nom_traf = _demo(urls[nom_charge],
+                                                       urls[nom_traf_sel])
         except Exception as e:
-            st.error(f"Téléchargement impossible depuis GitHub : {e}. "
-                     "Vérifier que le dépôt est public et que les URLs "
-                     "sont bien au format raw.githubusercontent.com.")
+            st.error(f"Téléchargement impossible depuis GitHub : {e}.")
             st.stop()
-        st.success(f"Fichiers d'exemple chargés : charge audio "
-                   f"({len(octets_pred)/1e6:.1f} Mo) et trafic "
-                   f"« {nom_traf} » ({len(octets_traf)/1e3:.0f} ko).")
+        st.success(f"Fichiers d'exemple chargés : « {nom_charge} » "
+                   f"({len(octets_pred)/1e6:.1f} Mo) et « {nom_traf} » "
+                   f"({_ko(len(octets_traf))}).")
 
     # ── Pipeline (mis en cache sur le contenu des fichiers + paramètres) ─
     @st.cache_data(show_spinner="Lecture des prédictions acoustiques…")
